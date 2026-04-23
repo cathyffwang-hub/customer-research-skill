@@ -1,6 +1,6 @@
 ---
 name: 客户调研大纲生成
-version: 1.7.0
+version: 1.8.0
 description: >
   客户调研提问大纲智能生成 skill。触发场景：用户说"我要调研 xx 客户"、"帮我生成 xx 客户的调研大纲"、
   "客户调研"、"调研提问大纲"、"文档场景调研"、"企微文档调研"、"腾讯文档调研"、
@@ -35,6 +35,118 @@ node /Users/cathy/.workbuddy/skills/客户调研大纲生成/scripts/update-chec
 ---
 
 ## 🧭 执行流程（严格按顺序）
+
+### Step 0 · 环境预检（首次使用必须做，已就绪的用户无感知）
+
+本 skill 依赖 **腾讯文档 MCP** 建档。不同用户本地环境不一样，菲菲（作者）的机器上一切已就绪，同事装完 skill 后可能缺配置。
+
+**核心原则：只在真缺失时才打扰用户，已就绪的用户完全感知不到这一步。**
+
+#### 0.1 静默检测（三项并行，不问用户）
+
+依次执行以下检测，任一缺失则进入 0.2 引导流程；全部就绪则跳到 Step 1。
+
+**① 检测腾讯文档 MCP 是否已安装**
+
+```bash
+# 看 WorkBuddy 的 MCP 配置里有没有 tencent-docs 条目
+test -f ~/.workbuddy/mcp.json && python3 -c "import json; c=json.load(open('$HOME/.workbuddy/mcp.json')); print('OK' if 'tencent-docs' in c.get('mcpServers', {}) else 'MISSING')" 2>/dev/null
+```
+
+- 返回 `OK` → 通过
+- 返回 `MISSING` / 报错 / 文件不存在 → 标记 `mcp_not_installed`
+
+**② 检测腾讯文档 MCP 是否已授权**
+
+```bash
+# 试调一个最轻量的工具（list_tables 不会改数据），能正常返回即已授权
+mcporter call "tencent-docs" "check_skill_update" --args '{"version":"0.0.0"}' 2>&1 | grep -qE "400006|鉴权|unauthorized|token" && echo "UNAUTH" || echo "OK"
+```
+
+- 返回 `OK` → 通过
+- 返回 `UNAUTH` → 标记 `mcp_unauthorized`
+- 命令找不到（没装 mcporter 或没装 MCP）→ 视为 `mcp_not_installed`
+
+**③ 检测腾讯文档 skill 是否已安装（非必需，仅影响 MDX 自校验质量）**
+
+```bash
+test -d ~/.workbuddy/skills/腾讯文档 && echo "OK" || echo "MISSING"
+```
+
+- 返回 `OK` → 通过
+- 返回 `MISSING` → 标记 `docs_skill_missing`（不阻塞，只作提示）
+
+#### 0.2 根据检测结果用选项卡引导
+
+**场景 A · 全部 OK**（最常见）：不说任何废话，直接进 Step 1。
+
+**场景 B · MCP 未安装**（`mcp_not_installed`）：
+
+先给一条引导说明，再用 `ask_followup_question` 弹选项卡：
+
+> 🌶️ 你本地还没装「腾讯文档 MCP」，这个 skill 要靠它建文档。需要你先装一下，几分钟搞定。
+
+选项卡：
+```json
+[{
+  "id": "mcp_install",
+  "question": "腾讯文档 MCP 安装方式",
+  "options": [
+    "我来帮你自动写入 ~/.workbuddy/mcp.json（推荐，需要你的 mcporter 已装好）",
+    "我告诉你具体步骤，你自己装（新手稳妥）",
+    "我已经装了，刚才的检测不准（让我跳过检测继续）"
+  ],
+  "multiSelect": false
+}]
+```
+
+- 选 ①：AI 读 `~/.workbuddy/mcp.json`（不存在就创建），合并写入标准配置：
+  ```json
+  {"mcpServers": {"tencent-docs": {"command": "npx", "args": ["-y", "@tencent-docs/mcp-server@latest"]}}}
+  ```
+  写入后提示用户："重启 WorkBuddy / 重新打开对话，再跑一次 skill"。
+- 选 ②：AI 输出文档官方安装链接 + 关键命令（`npm i -g mcporter`、`mcporter login tencent-docs`），不代操作。
+- 选 ③：跳过检测继续，但在建档失败时给出排查建议。
+
+**场景 C · MCP 已装但未授权**（`mcp_unauthorized`）：
+
+> 🌶️ 腾讯文档 MCP 已装好，但检测到还没授权 —— AI 拿不到你的账号身份，没法帮你建文档。
+
+选项卡：
+```json
+[{
+  "id": "mcp_auth",
+  "question": "腾讯文档 MCP 授权方式",
+  "options": [
+    "浏览器一键登录（最简单，我来执行 mcporter auth tencent-docs，你在浏览器点同意）",
+    "我已经有 access token，直接手动配置",
+    "我已经登录过了，刚才的检测不准（让我跳过检测继续）"
+  ],
+  "multiSelect": false
+}]
+```
+
+- 选 ①：执行 `mcporter auth tencent-docs`（或 `mcporter login tencent-docs`，以实际命令为准），引导用户到浏览器完成 OAuth。完成后再自动重跑检测。
+- 选 ②：让用户粘 token，AI 写入 `~/.workbuddy/mcp.json` 对应 MCP 条目的 `env` / `headers`。
+- 选 ③：跳过检测继续。
+
+**场景 D · 腾讯文档 skill 未安装**（`docs_skill_missing`，非阻塞）：
+
+轻提示一句，不弹选项卡：
+
+> 💡 建议一并装「腾讯文档 skill」（可选，用于更精细的 MDX 格式校验），命令：
+> ```bash
+> git clone https://github.com/tencent-docs/skill-tencent-docs.git ~/.workbuddy/skills/腾讯文档
+> ```
+> 不装也能跑，但 MDX 偶尔会有小排版瑕疵。
+
+提示完继续 Step 1，不阻塞。
+
+#### 0.3 预检通过后
+
+一次通过的用户（包括菲菲自己）根本不会看到上面任何内容。检测失败的用户按选项卡走一遍后，**重新执行 Step 0 静默检测**，全通过再进 Step 1。
+
+---
 
 ### Step 1 · 信息收集（用结构化选项卡让用户"选"而不是"打字"）
 
@@ -264,12 +376,13 @@ mcporter call "tencent-docs" "manage.move_file_to_space" --args '{
 
 ## ⚠️ 硬约束
 
-1. **不要改动模板中正式调研部分的问题文案**——这是业务方定下来的，只替换参数
-2. **不要加"客户案例/解决方案"章节**——本版已删除
-3. **文档默认建到腾讯文档根目录**，不传 `parent_id`；归档在 Step 5.5 单独完成
-4. **emoji 必须保留**（🎯⏰🙋🔍💡⭐🚩✍️📃 等）
-5. **MDX 格式严格遵循** `腾讯文档 skill` 的 mdx_references 规范，不要自造组件
-6. **归档时空间和客户子夹一律复用不重建**（v1.6）：先 query 确认不存在再 create，同名空间/同名文件夹绝对不能重复建
+1. **Step 0 环境预检必须先跑**（v1.8）：检测腾讯文档 MCP 是否已安装且已授权，缺失时用选项卡引导同事；已就绪的用户完全感知不到这一步
+2. **不要改动模板中正式调研部分的问题文案**——这是业务方定下来的，只替换参数
+3. **不要加"客户案例/解决方案"章节**——本版已删除
+4. **文档默认建到腾讯文档根目录**，不传 `parent_id`；归档在 Step 5.5 单独完成
+5. **emoji 必须保留**（🎯⏰🙋🔍💡⭐🚩✍️📃 等）
+6. **MDX 格式严格遵循** `腾讯文档 skill` 的 mdx_references 规范，不要自造组件
+7. **归档时空间和客户子夹一律复用不重建**（v1.6）：先 query 确认不存在再 create，同名空间/同名文件夹绝对不能重复建
 
 ## 🎨 排版风格（v1.5 最新规则，严格执行）
 
