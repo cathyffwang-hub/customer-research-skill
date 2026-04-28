@@ -1,8 +1,8 @@
 #!/bin/bash
-# 客户调研大纲生成 Skill - 安装脚本（含自动更新）
+# 客户调研大纲生成 Skill - 安装脚本（自动更新）
 # 使用方法：
 #   1. 先 clone 仓库：
-#     git clone git@github.com:Tencent-docx-CSM/customer-research-skill.git ~/.workbuddy/skills/客户调研大纲生成
+#     git clone https://github.com/cathyffwang-hub/customer-research-skill.git ~/.workbuddy/skills/客户调研大纲生成
 #   2. 运行本脚本注册自动更新：
 #     bash ~/.workbuddy/skills/客户调研大纲生成/install.sh
 
@@ -10,6 +10,7 @@ set -e
 
 SKILL_NAME="客户调研大纲生成"
 SKILL_DIR="$HOME/.workbuddy/skills/$SKILL_NAME"
+AUTO_UPDATE_SCRIPT="$SKILL_DIR/auto_update.sh"
 PLIST_LABEL="com.workbuddy.skill.customer-research"
 PLIST_FILE="$HOME/Library/LaunchAgents/${PLIST_LABEL}.plist"
 
@@ -21,10 +22,10 @@ if [ ! -d "$SKILL_DIR/.git" ]; then
     echo "❌ 未检测到仓库目录：$SKILL_DIR"
     echo ""
     echo "请先 clone 仓库："
-    echo "  git clone git@github.com:Tencent-docx-CSM/customer-research-skill.git ~/.workbuddy/skills/客户调研大纲生成"
+    echo "  git clone https://github.com/cathyffwang-hub/customer-research-skill.git ~/.workbuddy/skills/客户调研大纲生成"
     echo ""
-    echo "或者使用 HTTPS（需输入 GitHub 账号密码）："
-    echo "  git clone https://github.com/Tencent-docx-CSM/customer-research-skill.git ~/.workbuddy/skills/客户调研大纲生成"
+    echo "或者使用 SSH（需配置 SSH Key）："
+    echo "  git clone git@github.com:cathyffwang-hub/customer-research-skill.git ~/.workbuddy/skills/客户调研大纲生成"
     exit 1
 fi
 
@@ -40,36 +41,18 @@ fi
 echo "   远程地址：$REMOTE_URL"
 echo ""
 
-# ========== 步骤 2：注册自动更新任务 ==========
-echo "🔄 正在注册自动更新任务（每 1 分钟检查一次）..."
+# ========== 步骤 2：检查 auto_update.sh ==========
+if [ ! -x "$AUTO_UPDATE_SCRIPT" ]; then
+    echo "⚠️  未找到可执行文件：auto_update.sh"
+    echo "   请确认仓库 clone 完整，或手动运行：chmod +x $AUTO_UPDATE_SCRIPT"
+    exit 1
+fi
+echo "✅ 找到自动更新脚本：$AUTO_UPDATE_SCRIPT"
 echo ""
 
-# 创建自动更新脚本
-AUTO_UPDATE_SCRIPT="$SKILL_DIR/auto_update.sh"
-cat > "$AUTO_UPDATE_SCRIPT" << 'AUTOUPDATE_EOF'
-#!/bin/bash
-# 自动更新脚本 - 由 launchd/cron 定时调用
-
-SKILL_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOG_FILE="$SKILL_DIR/auto_update.log"
-
-echo "$(date '+%Y-%m-%d %H:%M:%S') - 检查更新..." >> "$LOG_FILE"
-
-cd "$SKILL_DIR"
-
-# 检查是否有远程更新
-git remote update >/dev/null 2>&1
-LOCAL=$(git rev-parse @ 2>/dev/null || echo "no_local")
-REMOTE=$(git rev-parse @{u} 2>/dev/null || echo "no_remote")
-
-if [ "$LOCAL" != "$REMOTE" ] && [ "$REMOTE" != "no_remote" ] && [ "$LOCAL" != "no_local" ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - 发现更新，正在拉取..." >> "$LOG_FILE"
-    git pull origin main >> "$LOG_FILE" 2>&1
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - 更新完成" >> "$LOG_FILE"
-fi
-AUTOUPDATE_EOF
-
-chmod +x "$AUTO_UPDATE_SCRIPT"
+# ========== 步骤 3：注册自动更新任务 ==========
+echo "🔄 正在注册自动更新任务（每 1 分钟检查一次）..."
+echo ""
 
 # 检测操作系统并注册相应任务
 if [ "$(uname)" = "Darwin" ]; then
