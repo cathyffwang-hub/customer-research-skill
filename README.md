@@ -28,10 +28,6 @@ git clone <此仓库地址> 客户调研大纲生成
   - 检测项：① MCP 是否已安装 ② 是否已授权 ③ 腾讯文档 skill 是否已装（可选）
 - Node.js 已就绪
 
-### 3. 自动更新
-
-每次 skill 被调起时，会自动执行 `scripts/update-check.js`：检测远端是否有新 commit，有则自动 `git pull` 拉取最新版。**你不需要手动 pull**，下次用就是最新版。
-
 ## 使用
 
 在会话里直接说：
@@ -58,8 +54,6 @@ AI 会根据 `SKILL.md` 定义的流程：
 客户调研大纲生成/
 ├── SKILL.md                           # 入口：触发词 + 流程 + 硬约束
 ├── README.md                          # 你正在看的这个
-├── scripts/
-│   └── update-check.js                # Git 自动更新脚本
 └── templates/
     ├── template_A.mdx                 # 场景挖掘型（客户用得不好）
     ├── template_A_session.mdx         # 模板 A 的单场次块

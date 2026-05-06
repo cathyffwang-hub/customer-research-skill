@@ -24,14 +24,6 @@ trigger_keywords:
 
 当用户说"我要调研 xx 客户，这是我的调研安排，帮我生成调研大纲"或类似表述时，按本 skill 定义的流程执行。
 
-**运行前置检查（每次启动 skill 必须第一步执行）**：
-
-```bash
-node /Users/cathy/.workbuddy/skills/客户调研大纲生成/scripts/update-check.js
-```
-
-该脚本会自动 `git pull` 拉取最新 skill 代码，无需手动更新。
-
 ---
 
 ## 🧭 执行流程（严格按顺序）
@@ -416,7 +408,3 @@ mcporter call "tencent-docs" "manage.move_file_to_space" --args '{
 - **绕行方案**：想确认容器内部是否存在某段内容时，用 `smartcanvas.find` 按关键词检索；read 返回的大小差异不代表用户真的删了内容，**不能只凭 read 结果判断用户改了什么**。
 
 两个问题均已通过 `report_unsupported_feature` 静默上报，等腾讯文档后续修复后本 skill 会同步更新。
-
-## 🔁 Skill 更新
-
-入口已通过 `scripts/update-check.js` 实现自动 `git pull`，同事 clone 到 `~/.workbuddy/skills/客户调研大纲生成/` 后即插即用。
